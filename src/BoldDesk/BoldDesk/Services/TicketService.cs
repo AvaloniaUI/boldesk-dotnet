@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Web;
+using BoldDesk.Extensions;
 using BoldDesk.Models;
 
 namespace BoldDesk.Services;
@@ -95,11 +96,20 @@ public class TicketService : BaseService, ITicketService
             RequiresCounts = true,
             Q = parameters.Q,
             SortBy = parameters.SortBy,
-            SortOrder = parameters.SortOrder
+            OrderBy = parameters.OrderBy
         };
 
         var response = await GetTicketsAsync(countParams);
         return response.Count;
+    }
+
+    /// <summary>
+    /// Retrieves a single ticket by its ID
+    /// </summary>
+    public async Task<Ticket> GetTicketAsync(int ticketId)
+    {
+        var url = $"{BaseUrl}/tickets/{ticketId}";
+        return await ExecuteRequestAsync<Ticket>(url);
     }
 
     /// <summary>
@@ -115,7 +125,7 @@ public class TicketService : BaseService, ITicketService
                 Page = 1,
                 PerPage = 1,
                 SortBy = "createdon",
-                SortOrder = "asc"
+                OrderBy = OrderBy.Ascending
             };
 
             // Get newest ticket
@@ -124,7 +134,7 @@ public class TicketService : BaseService, ITicketService
                 Page = 1,
                 PerPage = 1,
                 SortBy = "createdon",
-                SortOrder = "desc"
+                OrderBy = OrderBy.Descending
             };
 
             var oldestTask = GetTicketsAsync(oldestParams);
@@ -166,9 +176,9 @@ public class TicketService : BaseService, ITicketService
             query["sortBy"] = parameters.SortBy;
         }
 
-        if (!string.IsNullOrWhiteSpace(parameters.SortOrder))
+        if (parameters.OrderBy.HasValue)
         {
-            query["orderBy"] = parameters.SortOrder;
+            query["orderBy"] = parameters.OrderBy.Value.ToApiString();
         }
 
         uriBuilder.Query = query.ToString();

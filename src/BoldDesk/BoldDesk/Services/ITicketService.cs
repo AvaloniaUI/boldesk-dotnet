@@ -26,6 +26,11 @@ public interface ITicketService
     /// Gets the date range from existing tickets
     /// </summary>
     Task<(DateTime? oldestDate, DateTime? newestDate)> GetTicketDateRangeAsync();
+
+    /// <summary>
+    /// Gets a specific ticket by ID
+    /// </summary>
+    Task<Ticket> GetTicketAsync(int ticketId);
     
     // Future CRUD operations
     // Task<Ticket> GetTicketAsync(int ticketId);

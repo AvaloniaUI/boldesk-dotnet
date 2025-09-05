@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BoldDesk", "BoldDesk\BoldDe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BoldDesk.Cli", "BoldDesk.Cli\BoldDesk.Cli.csproj", "{399E9EA5-0189-4C5F-B8F9-5F34F65A3F83}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BoldDesk.Tests", "BoldDesk.Tests\BoldDesk.Tests.csproj", "{ED199F3A-342D-4D54-8DE3-D80F71E0B9C1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{399E9EA5-0189-4C5F-B8F9-5F34F65A3F83}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{399E9EA5-0189-4C5F-B8F9-5F34F65A3F83}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{399E9EA5-0189-4C5F-B8F9-5F34F65A3F83}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED199F3A-342D-4D54-8DE3-D80F71E0B9C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED199F3A-342D-4D54-8DE3-D80F71E0B9C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED199F3A-342D-4D54-8DE3-D80F71E0B9C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED199F3A-342D-4D54-8DE3-D80F71E0B9C1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

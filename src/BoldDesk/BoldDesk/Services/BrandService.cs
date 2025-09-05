@@ -10,8 +10,7 @@ namespace BoldDesk.Services;
 /// </summary>
 public class BrandService : BaseService, IBrandService
 {
-    public BrandService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions) 
-        : base(httpClient, baseUrl, jsonOptions)
+    public BrandService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions) : base(httpClient, baseUrl, jsonOptions)
     {
     }
 

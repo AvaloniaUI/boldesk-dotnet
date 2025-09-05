@@ -10,8 +10,7 @@ namespace BoldDesk.Services;
 /// </summary>
 public class WorklogService : BaseService, IWorklogService
 {
-    public WorklogService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions) 
-        : base(httpClient, baseUrl, jsonOptions)
+    public WorklogService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions) : base(httpClient, baseUrl, jsonOptions)
     {
     }
 
@@ -28,10 +27,7 @@ public class WorklogService : BaseService, IWorklogService
     /// <summary>
     /// Fetches all worklogs using pagination, respecting rate limits
     /// </summary>
-    public async IAsyncEnumerable<Worklog> GetAllWorklogsAsync(
-        WorklogQueryParameters? parameters = null, 
-        IProgress<string>? progress = null, 
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<Worklog> GetAllWorklogsAsync(WorklogQueryParameters? parameters = null, IProgress<string>? progress = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         parameters ??= new WorklogQueryParameters();
         var currentPage = parameters.Page;

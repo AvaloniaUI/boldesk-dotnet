@@ -7,5 +7,5 @@ public class TicketQueryParameters
     public bool RequiresCounts { get; set; } = true;
     public string? Q { get; set; } // Advanced query filter
     public string? SortBy { get; set; }
-    public string? SortOrder { get; set; } = "desc";
+    public OrderBy? OrderBy { get; set; } = Models.OrderBy.Descending;
 }
