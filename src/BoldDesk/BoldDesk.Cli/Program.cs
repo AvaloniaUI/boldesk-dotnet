@@ -425,7 +425,7 @@ public class Program
                     {
                         $"[mediumpurple1]Status[/]: {status}  [gold1]Priority[/]: {priority}",
                         $"[grey]Created[/]: {t.CreatedOn:yyyy-MM-dd HH:mm}  [grey]Updated[/]: {t.LastUpdatedOn:yyyy-MM-dd HH:mm}",
-                        !string.IsNullOrEmpty(t.Brand?.BrandName) ? $"[grey]Brand[/]: {Markup.Escape(t.Brand!.BrandName)}" : null,
+                        !string.IsNullOrEmpty(t.Brand) ? $"[grey]Brand[/]: {Markup.Escape(t.Brand)}" : null,
                         t.Agent != null ? $"[grey]Agent[/]: {Markup.Escape(t.Agent.Name)}" : null
                     };
                     var body = string.Join("\n", lines.Where(l => l != null));

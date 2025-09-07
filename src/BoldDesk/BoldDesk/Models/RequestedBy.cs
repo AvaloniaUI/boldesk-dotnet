@@ -7,6 +7,9 @@ public class RequestedBy
     [JsonPropertyName("userId")]
     public int UserId { get; set; }
 
+    [JsonPropertyName("userTypeId")]
+    public int? UserTypeId { get; set; }
+
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 

@@ -56,18 +56,8 @@ public class Ticket
     [JsonPropertyName("lastUpdatedOn")]
     public DateTime? LastUpdatedOn { get; set; }
 
-    private Brand? _brand;
     [JsonPropertyName("brand")]
-    public Brand? Brand
-    {
-        get => _brand;
-        set
-        {
-            _brand = value;
-            if (value != null)
-                BrandId = value.BrandId;
-        }
-    }
+    public string? Brand { get; set; }
 
     [JsonPropertyName("brandId")]
     public int? BrandId { get; set; }
@@ -77,15 +67,7 @@ public class Ticket
 
     // Map type.name to Mode if provided (some APIs use "type")
     [JsonPropertyName("type")]
-    public IdName? Type
-    {
-        get => null;
-        set
-        {
-            if (value?.Name != null)
-                Mode = value.Name;
-        }
-    }
+    public IdName? Type { get; set; }
 
     [JsonPropertyName("isVisibleToCustomer")]
     public bool IsVisibleToCustomer { get; set; }
@@ -100,19 +82,8 @@ public class Ticket
     [JsonPropertyName("sourceId")]
     public int? SourceId { get; set; }
 
-    private IdName? _source;
-    // Some responses provide { id, name } for source
     [JsonPropertyName("source")]
-    public IdName? Source
-    {
-        get => _source;
-        set
-        {
-            _source = value;
-            if (value?.Id != null)
-                SourceId = value.Id;
-        }
-    }
+    public string? Source { get; set; }
 
     [JsonPropertyName("lastRepliedOn")]
     public DateTime? LastRepliedOn { get; set; }
@@ -127,6 +98,91 @@ public class Ticket
 
     [JsonPropertyName("isSpamOrDeleted")]
     public bool? IsSpamOrDeleted { get; set; }
+
+    // Additional fields from actual API response
+    [JsonPropertyName("statusSortOrder")]
+    public int? StatusSortOrder { get; set; }
+
+    [JsonPropertyName("prioritySortOrder")]
+    public int? PrioritySortOrder { get; set; }
+
+    [JsonPropertyName("ticketLastRepliedByUserTypeId")]
+    public int? TicketLastRepliedByUserTypeId { get; set; }
+
+    [JsonPropertyName("isBrandActive")]
+    public bool? IsBrandActive { get; set; }
+
+    [JsonPropertyName("isCustomerPortalActive")]
+    public bool? IsCustomerPortalActive { get; set; }
+
+    [JsonPropertyName("lockedBy")]
+    public object? LockedBy { get; set; }
+
+    [JsonPropertyName("isTicketLocked")]
+    public bool? IsTicketLocked { get; set; }
+
+    [JsonPropertyName("contactGroup")]
+    public IdName? ContactGroup { get; set; }
+
+    [JsonPropertyName("ticketStateId")]
+    public int? TicketStateId { get; set; }
+
+    [JsonPropertyName("totalTimeLogged")]
+    public int? TotalTimeLogged { get; set; }
+
+    [JsonPropertyName("billableTimeLogged")]
+    public int? BillableTimeLogged { get; set; }
+
+    [JsonPropertyName("createdBy")]
+    public IdName? CreatedBy { get; set; }
+
+    [JsonPropertyName("lastModifiedBy")]
+    public IdName? LastModifiedBy { get; set; }
+
+    [JsonPropertyName("ticketApprovalPendingCount")]
+    public int? TicketApprovalPendingCount { get; set; }
+
+    [JsonPropertyName("ticketApprovalRequestCount")]
+    public int? TicketApprovalRequestCount { get; set; }
+
+    [JsonPropertyName("ticketApprovalApprovedCount")]
+    public int? TicketApprovalApprovedCount { get; set; }
+
+    [JsonPropertyName("ticketApprovalRejectedCount")]
+    public int? TicketApprovalRejectedCount { get; set; }
+
+    [JsonPropertyName("hoursSinceRequesterResponded")]
+    public DateTime? HoursSinceRequesterResponded { get; set; }
+
+    [JsonPropertyName("hoursSinceAgentResponded")]
+    public DateTime? HoursSinceAgentResponded { get; set; }
+
+    [JsonPropertyName("isTicketBrandChanged")]
+    public bool? IsTicketBrandChanged { get; set; }
+
+    [JsonPropertyName("ticketFormId")]
+    public IdName? TicketFormId { get; set; }
+
+    [JsonPropertyName("emailReceivedAt")]
+    public string? EmailReceivedAt { get; set; }
+
+    [JsonPropertyName("requesterEmail")]
+    public string? RequesterEmail { get; set; }
+
+    [JsonPropertyName("approvalRequestStatus")]
+    public string? ApprovalRequestStatus { get; set; }
+
+    [JsonPropertyName("hasAnyPendingApprovalRequests")]
+    public bool? HasAnyPendingApprovalRequests { get; set; }
+
+    [JsonPropertyName("tag")]
+    public List<Tag>? Tags { get; set; }
+
+    [JsonPropertyName("satisfactionSurveyCategory")]
+    public IdName? SatisfactionSurveyCategory { get; set; }
+
+    [JsonPropertyName("satisfactionSurveyRatingPoint")]
+    public int? SatisfactionSurveyRatingPoint { get; set; }
 
     [JsonPropertyName("closedOn")]
     public DateTime? ClosedOn { get; set; }
@@ -163,16 +219,26 @@ public class Ticket
 
     // Custom fields that appear in the actual API response
     [JsonPropertyName("cf_operating_system")]
-    public string? CfOperatingSystem { get; set; }
+    public string? OperatingSystem { get; set; }
 
     [JsonPropertyName("cf_avaloniaxpf_version")]
-    public string? CfAvaloniaXpfVersion { get; set; }
+    public string? AvaloniaXpfVersion { get; set; }
+
+    [JsonPropertyName("cf_accelerate_support_tier")]
+    public string? AccelerateSupportTier { get; set; }
 
     [JsonPropertyName("customFields")]
     public object? CustomFields { get; set; }
 
     // Maps simple { id, name } objects
     public class IdName
+    {
+        [JsonPropertyName("id")] public int? Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+    }
+
+    // Tag model for tags array
+    public class Tag
     {
         [JsonPropertyName("id")] public int? Id { get; set; }
         [JsonPropertyName("name")] public string? Name { get; set; }
