@@ -111,31 +111,57 @@ public class Program
         Ui.MarkupLine("[bold]Usage[/]: bolddesk [underline]<command>[/] [grey][[options]][/]");
         Console.WriteLine();
         Ui.MarkupLine("[bold]Commands[/]:");
-;        Console.WriteLine("  config set          Set configuration values");
-        Console.WriteLine("  config get          Get current configuration");
-        Console.WriteLine("  config test         Test connection to BoldDesk API");
-        Console.WriteLine("  tickets list        List tickets");
-        Console.WriteLine("  tickets get         Get ticket details");
-        Console.WriteLine("  brands list         List brands");
-        Console.WriteLine("  agents list         List agents");
-        Console.WriteLine("  worklogs list       List worklogs");
-        Console.WriteLine("  contact-groups list   List contact groups");
-        Console.WriteLine("  contact-groups get    Get contact group by id/name");
-        Console.WriteLine("  contact-groups count  Count contact groups");
-        Console.WriteLine("  contact-groups contacts <list|add|remove>");
-        Console.WriteLine("  contact-groups notes <list|add|update|delete>");
-        Console.WriteLine("  contact-groups export <groups|contacts>");
-        Console.WriteLine("  install-completion   Print or install shell completion");
-        Console.WriteLine("  repl                 Start interactive shell");
-        Console.WriteLine("  contacts list         List contacts");
-        Console.WriteLine("  contacts get          Get contact by id/email");
-        Console.WriteLine("  contacts create       Create new contact");
-        Console.WriteLine("  contacts update       Update existing contact");
-        Console.WriteLine("  contacts delete       Delete contacts");
+        AnsiConsole.MarkupLine("  [yellow]Configuration:[/]");
+        Console.WriteLine("    config set          Set configuration values");
+        Console.WriteLine("    config get          Get current configuration");
+        Console.WriteLine("    config test         Test connection to BoldDesk API");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Tickets:[/]");
+        Console.WriteLine("    tickets <subcommand>    Full ticket management (list, get, create, update, reply, etc.)");
+        Console.WriteLine("    tickets help            Show all available ticket commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Brands:[/]");
+        Console.WriteLine("    brands <subcommand>     Brand management (list, get, create, update, delete)");
+        Console.WriteLine("    brands help             Show all available brand commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Agents:[/]");
+        Console.WriteLine("    agents <subcommand>     Agent management (list, get, create, update, status, etc.)");
+        Console.WriteLine("    agents help             Show all available agent commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Contact Groups:[/]");
+        Console.WriteLine("    contact-groups <subcommand>  Contact group management (list, get, create, update, members)");
+        Console.WriteLine("    contact-groups help          Show all available contact group commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Contacts:[/]");
+        Console.WriteLine("    contacts <subcommand>        Full contact management (list, get, create, update, etc.)");
+        Console.WriteLine("    contacts help                Show all available contact commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Worklogs:[/]");
+        Console.WriteLine("    worklogs <subcommand>        Full worklog management (list, count, export)");
+        Console.WriteLine("    worklogs help                Show all available worklog commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Fields:[/]");
+        Console.WriteLine("    fields <subcommand>          Field option management (list, add, remove, configure)");
+        Console.WriteLine("    fields help                  Show all available field commands");
+        Console.WriteLine();
+        AnsiConsole.MarkupLine("  [yellow]Other:[/]");
+        Console.WriteLine("    list <resource>      Alias for '<resource> list' (e.g. 'list agents')");
+        Console.WriteLine("    install-completion  Print or install shell completion");
+        Console.WriteLine("    repl               Start interactive shell");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --version, -v       Show version information");
         Console.WriteLine("  --help, -h          Show this help message");
+        Console.WriteLine();
+        Ui.MarkupLine("[bold]Getting Help:[/]");
+        Console.WriteLine("  Run any command with 'help' to see detailed usage:");
+        Console.WriteLine("    bolddesk tickets help");
+        Console.WriteLine("    bolddesk agents help");
+        Console.WriteLine("    bolddesk brands help");
+        Console.WriteLine("    bolddesk contact-groups help");
+        Console.WriteLine("    bolddesk contacts help");
+        Console.WriteLine("    bolddesk worklogs help");
+        Console.WriteLine("    bolddesk fields help");
     }
 
     static async Task<int> Route(string[] args)
@@ -147,8 +173,11 @@ public class Program
             "brands" => await HandleBrands(args[1..]),
             "agents" => await HandleAgents(args[1..]),
             "worklogs" => await HandleWorklogs(args[1..]),
+            "fields" => await HandleFields(args[1..]),
             "contact-groups" => await HandleContactGroups(args[1..]),
             "contacts" => await HandleContacts(args[1..]),
+            // Friendly alias so `bolddesk list agents` works
+            "list" => await HandleList(args[1..]),
             "complete" => await HandleComplete(args[1..]),
             "install-completion" => await HandleInstallCompletion(args[1..]),
             "repl" => await HandleRepl(args[1..]),
@@ -254,6 +283,46 @@ public class Program
     // TICKETS
     static async Task<int> HandleTickets(string[] args)
     {
+        // Use the new comprehensive ticket command handler
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
+        if (cfg == null) 
+        { 
+            Console.WriteLine("Missing config. Run 'bolddesk config set'."); 
+            return 1; 
+        }
+
+        // Inline support: `tickets get <id> --raw` prints the raw API JSON
+        if (args.Length > 0 && string.Equals(args[0], "get", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasRaw = args.Any(a => string.Equals(a, "--raw", StringComparison.OrdinalIgnoreCase));
+            if (hasRaw)
+            {
+                // Find ticket id (first non-flag numeric token after 'get')
+                int ticketId = 0;
+                for (int i = 1; i < args.Length; i++)
+                {
+                    var tok = args[i];
+                    if (tok.StartsWith("-")) continue;
+                    if (int.TryParse(tok, out ticketId)) break;
+                }
+                if (ticketId <= 0)
+                {
+                    Console.WriteLine("Usage: bolddesk tickets get <id> --raw");
+                    return 1;
+                }
+                await PrintRawAsync($"tickets/{ticketId}", cfg.Domain!, cfg.ApiKey!);
+                return 0;
+            }
+        }
+
+        using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
+        return await Commands.TicketCommands.ExecuteAsync(args, client);
+    }
+
+    // Legacy ticket handler for backward compatibility
+    static async Task<int> HandleTicketsLegacy(string[] args)
+    {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
             Console.WriteLine("Usage: bolddesk tickets <list|get> [options]");
@@ -274,8 +343,7 @@ public class Program
         if (cfg == null) { Console.WriteLine("Missing config. Run 'bolddesk config set'."); return 1; }
 
         int page = 1, perPage = 100;
-        string? q = null, sortBy = null;
-        OrderBy? orderBy = OrderBy.Descending;
+        string? q = null, sortBy = null, orderBy = "desc";
         string format = "table";
         bool allTickets = false;
         for (int i = 1; i < args.Length; i++)
@@ -289,7 +357,7 @@ public class Program
                 case "--query":
                 case "-q": if (i + 1 < args.Length) q = args[++i]; break;
                 case "--sort-by": if (i + 1 < args.Length) sortBy = args[++i]; break;
-                case "--sort-order": if (i + 1 < args.Length) orderBy = OrderByExtensions.FromApiString(args[++i]); break;
+                case "--sort-order": if (i + 1 < args.Length) { var order = args[++i]; orderBy = order.ToLowerInvariant() == "asc" ? "asc" : "desc"; } break;
                 case "--format": if (i + 1 < args.Length) format = args[++i]; break;
                 case "--all": allTickets = true; break;
             }
@@ -300,7 +368,7 @@ public class Program
         {
             case "list":
             {
-                var parameters = new TicketQueryParameters { Page = page, PerPage = perPage, Q = q, SortBy = sortBy, OrderBy = orderBy };
+                var parameters = new TicketQueryParameters { Page = page, PerPage = perPage, Q = q, OrderBy = string.IsNullOrEmpty(sortBy) ? orderBy : $"{sortBy} {orderBy}" };
                 if (allTickets)
                 {
                     if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
@@ -357,7 +425,7 @@ public class Program
                     {
                         $"[mediumpurple1]Status[/]: {status}  [gold1]Priority[/]: {priority}",
                         $"[grey]Created[/]: {t.CreatedOn:yyyy-MM-dd HH:mm}  [grey]Updated[/]: {t.LastUpdatedOn:yyyy-MM-dd HH:mm}",
-                        !string.IsNullOrEmpty(t.Brand) ? $"[grey]Brand[/]: {Markup.Escape(t.Brand)}" : null,
+                        !string.IsNullOrEmpty(t.Brand?.BrandName) ? $"[grey]Brand[/]: {Markup.Escape(t.Brand!.BrandName)}" : null,
                         t.Agent != null ? $"[grey]Agent[/]: {Markup.Escape(t.Agent.Name)}" : null
                     };
                     var body = string.Join("\n", lines.Where(l => l != null));
@@ -374,6 +442,39 @@ public class Program
 
     // BRANDS
     static async Task<int> HandleBrands(string[] args)
+    {
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
+        if (cfg == null) 
+        { 
+            Console.WriteLine("Missing config. Run 'bolddesk config set'."); 
+            return 1; 
+        }
+
+        // Inline raw: brands get --id <id> --raw
+        if (args.Length > 0 && string.Equals(args[0], "get", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasRaw = args.Any(a => string.Equals(a, "--raw", StringComparison.OrdinalIgnoreCase));
+            if (hasRaw)
+            {
+                int id = 0;
+                for (int i = 1; i < args.Length - 1; i++)
+                {
+                    if (string.Equals(args[i], "--id", StringComparison.OrdinalIgnoreCase) && int.TryParse(args[i + 1], out id))
+                        break;
+                }
+                if (id <= 0) { Console.WriteLine("Usage: bolddesk brands get --id <id> --raw"); return 1; }
+                await PrintRawAsync($"brands/{id}", cfg.Domain!, cfg.ApiKey!);
+                return 0;
+            }
+        }
+
+        using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
+        return await Commands.BrandCommands.HandleBrandCommandAsync(args, client);
+    }
+
+    // Legacy brand handler for backward compatibility
+    static async Task<int> HandleBrandsLegacy(string[] args)
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
@@ -434,6 +535,86 @@ public class Program
 
     // AGENTS
     static async Task<int> HandleAgents(string[] args)
+    {
+        // Allow showing help without requiring a configured client
+        if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
+        {
+            using var placeholder = new BoldDeskClient("example.com", "placeholder-api-key");
+            return await Commands.AgentCommands.HandleAgentCommandAsync(new[] { "help" }, placeholder);
+        }
+
+        // Inline raw: agents get --id <id> --raw
+        if (args.Length > 0 && string.Equals(args[0], "get", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasRaw = args.Any(a => string.Equals(a, "--raw", StringComparison.OrdinalIgnoreCase));
+            if (hasRaw)
+            {
+                long id = 0;
+                for (int i = 1; i < args.Length - 1; i++)
+                {
+                    if (string.Equals(args[i], "--id", StringComparison.OrdinalIgnoreCase) && long.TryParse(args[i + 1], out id))
+                        break;
+                }
+                if (id <= 0)
+                {
+                    Console.WriteLine("Usage: bolddesk agents get --id <userId> --raw");
+                    return 1;
+                }
+                var cfgRaw = await new Services.ConfigurationService().LoadEffectiveAsync();
+                if (cfgRaw == null) { Console.WriteLine("Missing config. Run 'bolddesk config set'."); return 1; }
+                await PrintRawAsync($"agents/{id}", cfgRaw.Domain!, cfgRaw.ApiKey!);
+                return 0;
+            }
+        }
+
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
+        if (cfg == null) 
+        { 
+            Console.WriteLine("Missing config. Run 'bolddesk config set'."); 
+            return 1; 
+        }
+
+        using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
+        return await Commands.AgentCommands.HandleAgentCommandAsync(args, client);
+    }
+
+    // LIST alias (supports patterns like: `bolddesk list agents [options]`)
+    static async Task<int> HandleList(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.WriteLine("Usage: bolddesk list <agents|brands|tickets|contacts|contact-groups|worklogs|fields> [options]");
+            return 0;
+        }
+
+        // entity is the first argument after 'list'
+        var entity = args[0].ToLowerInvariant();
+
+        // Some users may type redundant 'list', e.g. `list agents list --page 2`
+        // Strip an immediate trailing 'list' token if present
+        var rest = args.Skip(1).ToList();
+        if (rest.Count > 0 && string.Equals(rest[0], "list", StringComparison.OrdinalIgnoreCase))
+            rest = rest.Skip(1).ToList();
+
+        // Prepend the canonical subcommand we want to invoke on the entity handler
+        var forwarded = (new[] { "list" }).Concat(rest).ToArray();
+
+        return entity switch
+        {
+            "agents" => await HandleAgents(forwarded),
+            "brands" => await HandleBrands(forwarded),
+            "tickets" => await HandleTickets(forwarded),
+            "contacts" => await HandleContacts(forwarded),
+            "contact-groups" or "contactgroups" or "contact-groups" => await HandleContactGroups(forwarded),
+            "worklogs" => await HandleWorklogs(forwarded),
+            "fields" => await HandleFields(forwarded),
+            _ => Unknown($"list {entity}")
+        };
+    }
+
+    // Legacy agent handler for backward compatibility
+    static async Task<int> HandleAgentsLegacy(string[] args)
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
@@ -504,39 +685,58 @@ public class Program
     // WORKLOGS
     static async Task<int> HandleWorklogs(string[] args)
     {
-        if (args.Length == 0 || args[0] is "--help" or "-h")
-        {
-            Console.WriteLine("Usage: bolddesk worklogs list [--from <ISO>] [--to <ISO>] [--format json|table]");
-            return 0;
-        }
-        if (args[0].ToLowerInvariant() != "list") return Unknown($"worklogs {args[0]}");
-
-        DateTime? from = null, to = null;
-        string format = "table";
-        for (int i = 1; i < args.Length; i++)
-        {
-            switch (args[i])
-            {
-                case "--from": if (i + 1 < args.Length && DateTime.TryParse(args[++i], out var f)) from = f; break;
-                case "--to": if (i + 1 < args.Length && DateTime.TryParse(args[++i], out var t)) to = t; break;
-                case "--format": if (i + 1 < args.Length) format = args[++i]; break;
-            }
-        }
-
-        var cfg = await new Services.ConfigurationService().LoadEffectiveAsync();
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
         if (cfg == null) { Console.WriteLine("Missing config. Run 'bolddesk config set'."); return 1; }
         using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
-        var qp = new WorklogQueryParameters { Page = 1, PerPage = 50, LastUpdatedDateFrom = from, LastUpdatedDateTo = to };
-        var resp = await client.Worklogs.GetWorklogsAsync(qp);
-        if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            PrintAsJson(resp.Result);
-        else
-            RenderWorklogsTable(resp.Result.Take(50));
-        return 0;
+        return await Commands.WorklogCommands.HandleWorklogCommandAsync(args, client);
+    }
+
+    // FIELDS
+    static async Task<int> HandleFields(string[] args)
+    {
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
+        if (cfg == null) { Console.WriteLine("Missing config. Run 'bolddesk config set'."); return 1; }
+        using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
+        return await Commands.FieldCommands.HandleFieldCommandAsync(args, client);
     }
 
     // CONTACT GROUPS
     static async Task<int> HandleContactGroups(string[] args)
+    {
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
+        if (cfg == null) 
+        { 
+            Console.WriteLine("Missing config. Run 'bolddesk config set'."); 
+            return 1; 
+        }
+
+        // Inline raw: contact-groups get --id <id> --raw
+        if (args.Length > 0 && string.Equals(args[0], "get", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasRaw = args.Any(a => string.Equals(a, "--raw", StringComparison.OrdinalIgnoreCase));
+            if (hasRaw)
+            {
+                long id = 0;
+                for (int i = 1; i < args.Length - 1; i++)
+                {
+                    if (string.Equals(args[i], "--id", StringComparison.OrdinalIgnoreCase) && long.TryParse(args[i + 1], out id))
+                        break;
+                }
+                if (id <= 0) { Console.WriteLine("Usage: bolddesk contact-groups get --id <id> --raw"); return 1; }
+                await PrintRawAsync($"contact_groups/{id}", cfg.Domain!, cfg.ApiKey!);
+                return 0;
+            }
+        }
+
+        using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
+        return await Commands.ContactGroupCommands.HandleContactGroupCommandAsync(args, client);
+    }
+
+    // Legacy contact groups handler for backward compatibility
+    static async Task<int> HandleContactGroupsLegacy(string[] args)
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
@@ -946,21 +1146,44 @@ public class Program
     // CONTACTS
     static async Task<int> HandleContacts(string[] args)
     {
-        if (args.Length == 0 || args[0] is "--help" or "-h")
-        {
-            Console.WriteLine("Usage: bolddesk contacts <list|get|create|update|delete|block|unblock> [options]");
-            Console.WriteLine("  list     [--filter <text>] [--page <n>] [--per-page <n>] [--query <q>] [--view <name>] [--group <id>] [--all] [--format json|table]");
-            Console.WriteLine("           [--created-today] [--created-this-week] [--created-last-7-days] [--created-this-month] [--created-last-30-days]");
-            Console.WriteLine("           [--modified-today] [--with-ids <id1,id2,id3>]");
-            Console.WriteLine("  get      (--id <id> | --email <email>) [--format json|text]");
-            Console.WriteLine("  create   --email <email> --name <name> [--display-name <name>] [--phone <phone>] [--mobile <mobile>] [options]");
-            Console.WriteLine("  update   --id <id> [--field <name=value>] [options]");
-            Console.WriteLine("  delete   --id <id> [--mark-spam]");
-            Console.WriteLine("  block    --id <id> [--mark-spam]");
-            Console.WriteLine("  unblock  --id <id> [--remove-spam]");
-            return 0;
+        // Use the new comprehensive contact command handler
+        var cfgSvc = new Services.ConfigurationService();
+        var cfg = await cfgSvc.LoadEffectiveAsync();
+        if (cfg == null) 
+        { 
+            Console.WriteLine("Missing config. Run 'bolddesk config set'."); 
+            return 1; 
         }
 
+        // Inline raw: contacts get (--id <id> | --email <email>) --raw
+        if (args.Length > 0 && string.Equals(args[0], "get", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasRaw = args.Any(a => string.Equals(a, "--raw", StringComparison.OrdinalIgnoreCase));
+            if (hasRaw)
+            {
+                long id = 0; string? email = null;
+                for (int i = 1; i < args.Length - 1; i++)
+                {
+                    if (string.Equals(args[i], "--id", StringComparison.OrdinalIgnoreCase))
+                    { long.TryParse(args[i + 1], out id); }
+                    if (string.Equals(args[i], "--email", StringComparison.OrdinalIgnoreCase))
+                    { email = args[i + 1]; }
+                }
+                if (id <= 0 && string.IsNullOrWhiteSpace(email))
+                { Console.WriteLine("Usage: bolddesk contacts get (--id <id> | --email <email>) --raw"); return 1; }
+                var path = id > 0 ? $"contacts/{id}" : $"contacts/{Uri.EscapeDataString(email!)}";
+                await PrintRawAsync(path, cfg.Domain!, cfg.ApiKey!);
+                return 0;
+            }
+        }
+
+        using var client = new BoldDeskClient(cfg.Domain!, cfg.ApiKey!);
+        return await Commands.ContactCommands.HandleContactCommandAsync(args, client);
+    }
+
+    // Legacy contact handler for backward compatibility  
+    static async Task<int> HandleContactsLegacy(string[] args)
+    {
         var sub = args[0].ToLowerInvariant();
         var cfg = await new Services.ConfigurationService().LoadEffectiveAsync();
         if (cfg == null) { Console.WriteLine("Missing config. Run 'bolddesk config set'."); return 1; }
@@ -1346,28 +1569,6 @@ public class Program
         Ui.Write(table);
     }
 
-    static void RenderWorklogsTable(IEnumerable<Worklog> worklogs)
-    {
-        var table = new Table().Border(TableBorder.Rounded)
-            .AddColumn(new TableColumn($"[{Theme.Muted}]Id[/]").Centered())
-            .AddColumn(new TableColumn($"[{Theme.Muted}]TicketId[/]"))
-            .AddColumn(new TableColumn($"[{Theme.Accent}]Minutes[/]"))
-            .AddColumn(new TableColumn($"[{Theme.Muted}]Created[/]"))
-            .AddColumn(new TableColumn($"[{Theme.Primary}]Description[/]"));
-        foreach (var w in worklogs)
-        {
-            var desc = w.Description ?? string.Empty;
-            desc = TrimTo(desc, Theme.Compact ? 40 : 60);
-            table.AddRow(
-                $"[{Theme.Muted}]{w.WorklogId}[/]",
-                $"[{Theme.Muted}]{w.TicketId}[/]",
-                $"[{Theme.Accent}]{w.TimeSpent}[/]",
-                $"[{Theme.Muted}]{w.CreatedOn:yyyy-MM-dd HH:mm}[/]",
-                $"[{Theme.Primary}]{Markup.Escape(desc)}[/]"
-            );
-        }
-        Ui.Write(table);
-    }
 
     static void RenderBrandsTable(IEnumerable<Brand> brands)
     {
@@ -1400,6 +1601,22 @@ public class Program
         if (p.Contains("medium") || p.Contains("normal")) return $"[yellow]{Markup.Escape(priority)}[/]";
         if (p.Contains("low")) return $"[green]{Markup.Escape(priority)}[/]";
         return $"[gold1]{Markup.Escape(priority)}[/]";
+    }
+
+    // Prints the raw JSON for a given API path (relative to /api/v1.0)
+    static async Task PrintRawAsync(string path, string domain, string apiKey)
+    {
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Add("x-api-key", apiKey);
+        http.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        // Reuse CLI's generous timeout
+        if (http.Timeout.TotalSeconds <= 100)
+            http.Timeout = TimeSpan.FromMinutes(3);
+
+        var url = $"https://{domain}/api/v1.0/{path}";
+        var resp = await http.GetAsync(url);
+        var text = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine(text);
     }
 
     // Dynamic completion backend
@@ -1491,46 +1708,74 @@ public class Program
     static async Task<int> HandleRepl(string[] args)
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
-        Console.WriteLine($"BoldDesk CLI REPL (v{version}). Type 'help' for commands, 'exit' to quit.");
+        
+        // Welcome message using Spectre.Console
+        var welcomePanel = new Panel($"[bold]BoldDesk CLI Interactive Shell[/] [grey](v{version})[/]\n\n" +
+            "[yellow]Features:[/]\n" +
+            "  • [green]Tab completion[/] for commands and options\n" +
+            "  • [green]Syntax highlighting[/] for better readability\n" +
+            "  • [green]Command history[/] with up/down arrows\n" +
+            "  • [green]Multi-line input[/] support\n\n" +
+            "[grey]Type 'help' for commands, 'exit' to quit, 'clear' to clear screen.[/]")
+            .Border(BoxBorder.Rounded)
+            .BorderColor(Color.Blue)
+            .Header("[bold blue] Welcome [/]");
+        
+        AnsiConsole.Write(welcomePanel);
+        AnsiConsole.WriteLine();
+
+        // Use SimpleBoldDeskPrompt for now since PrettyPrompt 4.1.1 doesn't support completions
+        using var prompt = new Services.SimpleBoldDeskPrompt();
+        
         while (true)
         {
-            var prompt = new TextPrompt<string>("[bold][deepskyblue1]bolddesk>[/][/]")
-                .PromptStyle(Style.Plain)
-                .AllowEmpty();
-            var line = AnsiConsole.Prompt(prompt);
-            if (line == null) break; // EOF
-            line = line.Trim();
-            if (line.Length == 0) continue;
-            if (line.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
-                line.Equals("quit", StringComparison.OrdinalIgnoreCase) ||
-                line.Equals("q", StringComparison.OrdinalIgnoreCase))
-            {
-                break;
-            }
-            if (line.Equals("help", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowHelp(version);
-                continue;
-            }
-
-            // Allow comments
-            if (line.StartsWith("#")) continue;
-
-            var tokens = SplitArgs(line);
-            if (tokens.Length == 0) continue;
             try
             {
-                var code = await Route(tokens);
-                if (code != 0)
-                {
-                    Console.WriteLine($"(exit {code})");
-                }
+                var line = prompt.ReadLine()?.Trim() ?? "";
+                    
+                    if (line.Length == 0) continue;
+                    
+                    // Handle built-in commands
+                    if (line.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
+                        line.Equals("quit", StringComparison.OrdinalIgnoreCase) ||
+                        line.Equals("q", StringComparison.OrdinalIgnoreCase))
+                    {
+                        break;
+                    }
+                    
+                    if (line.Equals("clear", StringComparison.OrdinalIgnoreCase) ||
+                        line.Equals("cls", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AnsiConsole.Clear();
+                        continue;
+                    }
+                    
+                    if (line.Equals("help", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ShowHelp(version);
+                        continue;
+                    }
+
+                    // Allow comments
+                    if (line.StartsWith("#")) continue;
+
+                    var tokens = SplitArgs(line);
+                    if (tokens.Length == 0) continue;
+                    
+                    // Execute command
+                    var code = await Route(tokens);
+                    if (code != 0)
+                    {
+                        AnsiConsole.MarkupLine($"[grey](exit {code})[/]");
+                    }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Error: {ex.Message}");
+                AnsiConsole.MarkupLine($"[red]Error: {ex.Message}[/]");
             }
         }
+        
+        AnsiConsole.MarkupLine("[grey]Goodbye![/]");
         return 0;
     }
 

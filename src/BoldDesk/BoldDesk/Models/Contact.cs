@@ -26,7 +26,7 @@ public class Contact
     public string Status { get; set; } = string.Empty;
     
     [JsonPropertyName("lastActivityOn")]
-    public DateTime LastActivityOn { get; set; }
+    public DateTime? LastActivityOn { get; set; }
     
     [JsonPropertyName("isVerified")]
     public bool IsVerified { get; set; }
@@ -86,7 +86,7 @@ public class Contact
     public string? SavedItemId { get; set; }
     
     [JsonPropertyName("userCreationSource")]
-    public string? UserCreationSource { get; set; }
+    public object? UserCreationSource { get; set; }
     
     [JsonPropertyName("dataToken")]
     public string? DataToken { get; set; }
@@ -98,6 +98,7 @@ public class Contact
     public string? ProfileImageUrl { get; set; }
     
     [JsonPropertyName("userCountryId")]
+    [JsonConverter(typeof(NullableIntConverter))]
     public int? UserCountryId { get; set; }
     
     [JsonPropertyName("contactCustomFields")]

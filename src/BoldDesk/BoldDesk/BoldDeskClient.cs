@@ -52,6 +52,28 @@ public class BoldDeskClient : IBoldDeskClient
         _ownsHttpClient = ownsHttpClient;
         _baseUrl = $"https://{domain}/api/v1.0";
         
+        // Configure HTTP timeout (allow override via env var)
+        try
+        {
+            var envTimeout = Environment.GetEnvironmentVariable("BOLDDESK_HTTP_TIMEOUT_SECONDS");
+            if (!string.IsNullOrWhiteSpace(envTimeout) && int.TryParse(envTimeout, out var seconds) && seconds > 0)
+            {
+                _httpClient.Timeout = TimeSpan.FromSeconds(seconds);
+            }
+            else
+            {
+                // If using the default HttpClient timeout (~100s), increase to handle slower endpoints
+                if (_httpClient.Timeout.TotalSeconds <= 100)
+                {
+                    _httpClient.Timeout = TimeSpan.FromMinutes(3);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore timeout configuration errors
+        }
+        
         if (!_httpClient.DefaultRequestHeaders.Contains("x-api-key"))
         {
             _httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);

@@ -394,6 +394,79 @@ public class TicketQueryBuilder : QueryBuilder
     }
 
     /// <summary>
+    /// Filters by status category (open, closed, etc.)
+    /// </summary>
+    public TicketQueryBuilder WithStatusCategory(params int[] categoryIds)
+    {
+        if (categoryIds?.Length > 0)
+        {
+            AddCondition($"statuscategory:{FormatIdArray(categoryIds)}");
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Filters by external reference IDs
+    /// </summary>
+    public TicketQueryBuilder WithExternalReferenceIds(params string[] referenceIds)
+    {
+        if (referenceIds?.Length > 0)
+        {
+            var formattedIds = string.Join(",", referenceIds.Select(id => $"\"{id}\""));
+            AddCondition($"externalreferenceids:[{formattedIds}]");
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Filters by requester email
+    /// </summary>
+    public TicketQueryBuilder WithRequesterEmail(string email)
+    {
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            AddCondition($"requesteremail:\"{email}\"");
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Filters by requester phone
+    /// </summary>
+    public TicketQueryBuilder WithRequesterPhone(string phone)
+    {
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            AddCondition($"requesterphone:\"{phone}\"");
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Filters by agent email
+    /// </summary>
+    public TicketQueryBuilder WithAgentEmail(string email)
+    {
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            AddCondition($"agentemail:\"{email}\"");
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Filters by subject containing text
+    /// </summary>
+    public TicketQueryBuilder WithSubject(string subject)
+    {
+        if (!string.IsNullOrWhiteSpace(subject))
+        {
+            AddCondition($"subject:\"{subject}\"");
+        }
+        return this;
+    }
+
+    /// <summary>
     /// Applies the query to TicketQueryParameters
     /// </summary>
     public TicketQueryParameters ApplyTo(TicketQueryParameters? parameters = null)
@@ -409,5 +482,35 @@ public class TicketQueryBuilder : QueryBuilder
     public TicketQueryParameters ToParameters()
     {
         return ApplyTo(null);
+    }
+
+    /// <summary>
+    /// Sets the OrderBy field in the parameters
+    /// </summary>
+    public TicketQueryParameters WithOrderBy(string orderBy)
+    {
+        var parameters = ToParameters();
+        parameters.OrderBy = orderBy;
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets page number
+    /// </summary>
+    public TicketQueryParameters WithPage(int page)
+    {
+        var parameters = ToParameters();
+        parameters.Page = page;
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets per page count
+    /// </summary>
+    public TicketQueryParameters WithPerPage(int perPage)
+    {
+        var parameters = ToParameters();
+        parameters.PerPage = perPage;
+        return parameters;
     }
 }
