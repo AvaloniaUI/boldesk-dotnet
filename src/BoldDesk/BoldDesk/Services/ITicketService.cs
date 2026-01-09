@@ -152,6 +152,11 @@ public interface ITicketService
     /// Adds an attachment to a ticket
     /// </summary>
     Task<TicketAttachment> AddAttachmentAsync(int ticketId, Stream fileStream, string fileName, string? contentType = null);
+
+    /// <summary>
+    /// Uploads an attachment and returns a token that can be used when creating/replying to tickets
+    /// </summary>
+    Task<string> UploadAttachmentAsync(Stream fileStream, string fileName, string? contentType = null);
     
     /// <summary>
     /// Deletes a ticket attachment

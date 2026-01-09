@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using BoldDesk.Exceptions;
 using BoldDesk.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BoldDesk.Services;
 
@@ -14,13 +17,15 @@ public abstract class BaseService
     protected readonly HttpClient HttpClient;
     protected readonly string BaseUrl;
     protected readonly JsonSerializerOptions JsonOptions;
+    protected readonly ILogger Logger;
     protected RateLimitInfo? LastRateLimitInfo;
 
-    protected BaseService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions)
+    protected BaseService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions, ILogger? logger = null)
     {
         HttpClient = httpClient;
         BaseUrl = baseUrl;
         JsonOptions = jsonOptions;
+        Logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -252,45 +257,138 @@ public abstract class BaseService
 
     protected async Task<T> ExecuteRequestAsync<T>(string url) where T : new()
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Logger.LogDebug("[BoldDesk GET] Starting request to: {Url}", url);
+
         try
         {
             var response = await HttpClient.GetAsync(url);
-            
+            stopwatch.Stop();
+
+            Logger.LogDebug("[BoldDesk GET] Response {StatusCode} from {Url} in {ElapsedMs}ms",
+                (int)response.StatusCode, url, stopwatch.ElapsedMilliseconds);
+
             // Parse rate limit headers
             ParseRateLimitHeaders(response.Headers);
-            
-            if (!response.IsSuccessStatusCode)
+
+            if (LastRateLimitInfo != null)
             {
-                await ThrowBoldDeskException(response);
+                Logger.LogDebug("[BoldDesk] Rate limit: {Remaining}/{Limit}, resets at {Reset}",
+                    LastRateLimitInfo.Remaining, LastRateLimitInfo.Limit, LastRateLimitInfo.Reset);
             }
 
             var content = await response.Content.ReadAsStringAsync();
-            
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Logger.LogError("[BoldDesk GET] FAILED {StatusCode} for {Url}. Response body: {Response}",
+                    (int)response.StatusCode, url, content);
+                await ThrowBoldDeskException(response);
+            }
+
+            Logger.LogDebug("[BoldDesk GET] Success for {Url}. Response length: {ContentLength} chars", url, content?.Length ?? 0);
+
             if (string.IsNullOrWhiteSpace(content))
             {
+                Logger.LogWarning("[BoldDesk GET] Empty response body for {Url}", url);
                 return new T();
             }
-            
+
+            Logger.LogTrace("[BoldDesk GET] Response body: {Content}", content);
+
             var result = JsonSerializer.Deserialize<T>(content, JsonOptions);
-            
+
+            if (result == null)
+            {
+                Logger.LogWarning("[BoldDesk GET] Deserialization returned null for {Url}", url);
+            }
+
             return result ?? new T();
         }
         catch (BoldDeskApiException)
         {
-            // Re-throw BoldDesk exceptions
+            // Already logged above, just rethrow
             throw;
         }
         catch (HttpRequestException ex)
         {
-            // Wrap HTTP exceptions in BoldDeskApiException
+            stopwatch.Stop();
+            Logger.LogError(ex, "[BoldDesk GET] Network error after {ElapsedMs}ms for {Url}: {Message}",
+                stopwatch.ElapsedMilliseconds, url, ex.Message);
             throw new BoldDeskApiException($"Network error while calling BoldDesk API: {ex.Message}", ex);
         }
         catch (JsonException ex)
         {
+            Logger.LogError(ex, "[BoldDesk GET] JSON deserialization failed for {Url}: {Message}", url, ex.Message);
             throw new BoldDeskApiException($"Failed to parse API response: {ex.Message}. The API may have returned an unexpected format.", ex);
         }
         catch (TaskCanceledException ex)
         {
+            stopwatch.Stop();
+            Logger.LogError(ex, "[BoldDesk GET] Request timeout after {ElapsedMs}ms for {Url}: {Message}",
+                stopwatch.ElapsedMilliseconds, url, ex.Message);
+            throw new BoldDeskApiException($"API request timed out: {ex.Message}", ex);
+        }
+    }
+
+    protected async Task<TResponse> ExecutePostRequestAsync<TRequest, TResponse>(string url, TRequest request) where TResponse : new()
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var requestJson = JsonSerializer.Serialize(request, JsonOptions);
+
+        Logger.LogDebug("[BoldDesk POST] Starting request to: {Url}", url);
+        Logger.LogTrace("[BoldDesk POST] Request body: {RequestBody}", requestJson);
+
+        try
+        {
+            var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+            var response = await HttpClient.PostAsync(url, content);
+            stopwatch.Stop();
+
+            Logger.LogDebug("[BoldDesk POST] Response {StatusCode} from {Url} in {ElapsedMs}ms",
+                (int)response.StatusCode, url, stopwatch.ElapsedMilliseconds);
+
+            ParseRateLimitHeaders(response.Headers);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Logger.LogError("[BoldDesk POST] FAILED {StatusCode} for {Url}. Request: {Request}. Response: {Response}",
+                    (int)response.StatusCode, url, requestJson, responseContent);
+                await ThrowBoldDeskException(response);
+            }
+
+            Logger.LogDebug("[BoldDesk POST] Success for {Url}. Response length: {ContentLength} chars", url, responseContent?.Length ?? 0);
+            Logger.LogTrace("[BoldDesk POST] Response body: {Content}", responseContent);
+
+            if (string.IsNullOrWhiteSpace(responseContent))
+            {
+                return new TResponse();
+            }
+
+            return JsonSerializer.Deserialize<TResponse>(responseContent, JsonOptions) ?? new TResponse();
+        }
+        catch (BoldDeskApiException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            stopwatch.Stop();
+            Logger.LogError(ex, "[BoldDesk POST] Network error after {ElapsedMs}ms for {Url}: {Message}",
+                stopwatch.ElapsedMilliseconds, url, ex.Message);
+            throw new BoldDeskApiException($"Network error while calling BoldDesk API: {ex.Message}", ex);
+        }
+        catch (JsonException ex)
+        {
+            Logger.LogError(ex, "[BoldDesk POST] JSON error for {Url}: {Message}", url, ex.Message);
+            throw new BoldDeskApiException($"Failed to parse API response: {ex.Message}", ex);
+        }
+        catch (TaskCanceledException ex)
+        {
+            stopwatch.Stop();
+            Logger.LogError(ex, "[BoldDesk POST] Timeout after {ElapsedMs}ms for {Url}", stopwatch.ElapsedMilliseconds, url);
             throw new BoldDeskApiException($"API request timed out: {ex.Message}", ex);
         }
     }

@@ -7,7 +7,8 @@ namespace BoldDesk.Models;
 /// </summary>
 public class TicketMessage
 {
-    [JsonPropertyName("messageId")]
+    // BoldDesk returns "id" not "messageId"
+    [JsonPropertyName("id")]
     public int MessageId { get; set; }
 
     [JsonPropertyName("ticketId")]
@@ -19,7 +20,8 @@ public class TicketMessage
     [JsonPropertyName("fromUserId")]
     public int FromUserId { get; set; }
 
-    [JsonPropertyName("fromUser")]
+    // BoldDesk returns "updatedBy" not "fromUser"
+    [JsonPropertyName("updatedBy")]
     public User? FromUser { get; set; }
 
     [JsonPropertyName("toUserIds")]
@@ -338,8 +340,25 @@ public class User
     [JsonPropertyName("userId")]
     public int UserId { get; set; }
 
+    private string _name = string.Empty;
+
     [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set => _name = value;
+    }
+
+    // BoldDesk sometimes returns "userName" instead of "name"
+    [JsonPropertyName("userName")]
+    public string? UserName
+    {
+        get => _name;
+        set { if (!string.IsNullOrEmpty(value)) _name = value; }
+    }
+
+    [JsonPropertyName("shortCode")]
+    public string? ShortCode { get; set; }
 
     [JsonPropertyName("email")]
     public string? Email { get; set; }

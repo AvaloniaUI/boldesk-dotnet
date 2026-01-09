@@ -3,8 +3,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Web;
+using BoldDesk.Exceptions;
 using BoldDesk.Extensions;
 using BoldDesk.Models;
+using Microsoft.Extensions.Logging;
 
 namespace BoldDesk.Services;
 
@@ -13,8 +15,8 @@ namespace BoldDesk.Services;
 /// </summary>
 public class TicketService : BaseService, ITicketService
 {
-    public TicketService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions) 
-        : base(httpClient, baseUrl, jsonOptions)
+    public TicketService(HttpClient httpClient, string baseUrl, JsonSerializerOptions jsonOptions, ILogger? logger = null)
+        : base(httpClient, baseUrl, jsonOptions, logger)
     {
     }
 
@@ -25,7 +27,51 @@ public class TicketService : BaseService, ITicketService
     {
         parameters ??= new TicketQueryParameters();
         var url = BuildTicketsUrl(parameters);
-        return await ExecuteRequestAsync<BoldDeskResponse<Ticket>>(url);
+
+        Logger.LogDebug("[BoldDesk] GetTicketsAsync called. Page: {Page}, PerPage: {PerPage}, Q: {Query}",
+            parameters.Page, parameters.PerPage, parameters.Q ?? "(none)");
+
+        try
+        {
+            var result = await ExecuteRequestAsync<BoldDeskResponse<Ticket>>(url);
+            Logger.LogDebug("[BoldDesk] GetTicketsAsync returned {Count} tickets (total: {Total})",
+                result.Result?.Count ?? 0, result.Count);
+            return result;
+        }
+        catch (BoldDeskValidationException ex) when (IsContactDoesNotExistError(ex))
+        {
+            // When querying for tickets by a contact that doesn't exist in BoldDesk,
+            // return an empty result instead of throwing an exception
+            Logger.LogWarning("[BoldDesk] Contact doesn't exist - returning empty ticket list. Error: {Error}", ex.Message);
+            return new BoldDeskResponse<Ticket>
+            {
+                Result = new List<Ticket>(),
+                Count = 0
+            };
+        }
+    }
+
+    /// <summary>
+    /// Checks if the validation exception is due to a non-existent contact
+    /// </summary>
+    private static bool IsContactDoesNotExistError(BoldDeskValidationException ex)
+    {
+        if (ex == null)
+            return false;
+
+        // Check if there's an emailId field error
+        if (ex.HasFieldError("emailId"))
+            return true;
+
+        // Check if the error message contains "contact doesn't exist"
+        if (ex.Message?.Contains("contact doesn't exist", StringComparison.OrdinalIgnoreCase) == true ||
+            ex.Message?.Contains("contact does not exist", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        // Check if any of the errors mention contact not existing
+        return ex.Errors.Any(err =>
+            err.ErrorMessage?.Contains("contact doesn't exist", StringComparison.OrdinalIgnoreCase) == true ||
+            err.ErrorMessage?.Contains("contact does not exist", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     /// <summary>
@@ -110,8 +156,12 @@ public class TicketService : BaseService, ITicketService
     /// </summary>
     public async Task<Ticket> GetTicketAsync(int ticketId)
     {
+        Logger.LogDebug("[BoldDesk] GetTicketAsync called for ticketId: {TicketId}", ticketId);
         var url = $"{BaseUrl}/tickets/{ticketId}";
-        return await ExecuteRequestAsync<Ticket>(url);
+        var ticket = await ExecuteRequestAsync<Ticket>(url);
+        Logger.LogDebug("[BoldDesk] GetTicketAsync returned ticket {TicketId}: Title='{Title}', Status={Status}",
+            ticket.TicketId, ticket.Title, ticket.Status?.Description ?? ticket.Status?.Id.ToString());
+        return ticket;
     }
 
     /// <summary>
@@ -119,23 +169,65 @@ public class TicketService : BaseService, ITicketService
     /// </summary>
     public async Task<Ticket> CreateTicketAsync(CreateTicketRequest request)
     {
+        Logger.LogInformation("[BoldDesk] CreateTicketAsync called. Title: '{Title}', RequesterId: {RequesterId}, BrandId: {BrandId}",
+            request.Title, request.RequestedById, request.BrandId);
+
         var url = $"{BaseUrl}/tickets";
-        var content = new StringContent(
-            JsonSerializer.Serialize(request, JsonOptions),
-            Encoding.UTF8,
-            "application/json");
-        
+        var requestJson = JsonSerializer.Serialize(request, JsonOptions);
+
+        Logger.LogDebug("[BoldDesk] CreateTicket request body: {RequestBody}", requestJson);
+
+        var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await HttpClient.PostAsync(url, content);
+        stopwatch.Stop();
+
         var responseContent = await response.Content.ReadAsStringAsync();
-        
+
+        Logger.LogDebug("[BoldDesk] CreateTicket response {StatusCode} in {ElapsedMs}ms. Body: {ResponseBody}",
+            (int)response.StatusCode, stopwatch.ElapsedMilliseconds, responseContent);
+
         if (!response.IsSuccessStatusCode)
         {
+            Logger.LogError("[BoldDesk] CreateTicket FAILED {StatusCode}. Request: {Request}. Response: {Response}",
+                (int)response.StatusCode, requestJson, responseContent);
             throw new HttpRequestException($"API request failed: {response.StatusCode} - {responseContent}");
         }
-        
+
         ParseRateLimitHeaders(response.Headers);
-        return JsonSerializer.Deserialize<Ticket>(responseContent, JsonOptions) 
-            ?? throw new InvalidOperationException("Failed to deserialize response");
+
+        // BoldDesk may return either a direct Ticket object or a wrapped response
+        // Try to detect and handle both cases
+        using var doc = JsonDocument.Parse(responseContent);
+        var root = doc.RootElement;
+
+        Ticket? ticket = null;
+
+        // Check if response is wrapped (e.g., { "result": {...} } or { "ticket": {...} })
+        if (root.TryGetProperty("result", out var resultElement) && resultElement.ValueKind == JsonValueKind.Object)
+        {
+            Logger.LogDebug("[BoldDesk] CreateTicket response wrapped in 'result' property");
+            ticket = JsonSerializer.Deserialize<Ticket>(resultElement.GetRawText(), JsonOptions)
+                ?? throw new InvalidOperationException("Failed to deserialize ticket from 'result' wrapper");
+        }
+        else if (root.TryGetProperty("ticket", out var ticketElement) && ticketElement.ValueKind == JsonValueKind.Object)
+        {
+            Logger.LogDebug("[BoldDesk] CreateTicket response wrapped in 'ticket' property");
+            ticket = JsonSerializer.Deserialize<Ticket>(ticketElement.GetRawText(), JsonOptions)
+                ?? throw new InvalidOperationException("Failed to deserialize ticket from 'ticket' wrapper");
+        }
+        else
+        {
+            Logger.LogDebug("[BoldDesk] CreateTicket response is direct ticket object");
+            ticket = JsonSerializer.Deserialize<Ticket>(responseContent, JsonOptions)
+                ?? throw new InvalidOperationException("Failed to deserialize response");
+        }
+
+        Logger.LogInformation("[BoldDesk] CreateTicket SUCCESS. TicketId: {TicketId}, Title: '{Title}'",
+            ticket.TicketId, ticket.Title);
+
+        return ticket;
     }
 
     /// <summary>
@@ -442,7 +534,7 @@ public class TicketService : BaseService, ITicketService
     /// </summary>
     public async Task<Ticket> ReplyTicketAsync(int ticketId, ReplyTicketRequest request)
     {
-        var url = $"{BaseUrl}/tickets/{ticketId}/reply";
+        var url = $"{BaseUrl}/tickets/{ticketId}/updates";
         var content = new StringContent(
             JsonSerializer.Serialize(request, JsonOptions),
             Encoding.UTF8,
@@ -468,7 +560,55 @@ public class TicketService : BaseService, ITicketService
     {
         parameters ??= new TicketMessageQueryParameters();
         var url = BuildTicketMessagesUrl(ticketId, parameters);
-        return await ExecuteRequestAsync<BoldDeskResponse<TicketMessage>>(url);
+
+        // Handle response directly to avoid error logging for expected 404s
+        // (BoldDesk returns 404 when there are no messages, which is normal for new tickets)
+        try
+        {
+            var response = await HttpClient.GetAsync(url);
+            ParseRateLimitHeaders(response.Headers);
+
+            // 404 is expected when ticket has no messages - return empty list without error logging
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                Logger.LogDebug("BoldDesk returned 404 for ticket {TicketId} messages - returning empty list (this is normal for new tickets)", ticketId);
+                return new BoldDeskResponse<TicketMessage>();
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Logger.LogError("[BoldDesk GET] FAILED {StatusCode} for {Url}. Response body: {Response}",
+                    (int)response.StatusCode, url, content);
+                await ThrowBoldDeskException(response);
+            }
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return new BoldDeskResponse<TicketMessage>();
+            }
+
+            // Log raw JSON to debug field mapping issues
+            Logger.LogInformation("[BoldDesk Messages RAW] {Content}", content);
+
+            return JsonSerializer.Deserialize<BoldDeskResponse<TicketMessage>>(content, JsonOptions)
+                ?? new BoldDeskResponse<TicketMessage>();
+        }
+        catch (BoldDeskApiException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            Logger.LogError(ex, "Failed to get messages for ticket {TicketId} from {Url}: {Message}", ticketId, url, ex.Message);
+            throw new BoldDeskApiException($"Network error while calling BoldDesk API: {ex.Message}", ex);
+        }
+        catch (JsonException ex)
+        {
+            Logger.LogError(ex, "Failed to parse messages response for ticket {TicketId}: {Message}", ticketId, ex.Message);
+            throw new BoldDeskApiException($"Failed to parse API response: {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -573,7 +713,7 @@ public class TicketService : BaseService, ITicketService
     public async Task<TicketAttachment> AddAttachmentAsync(int ticketId, Stream fileStream, string fileName, string? contentType = null)
     {
         var url = $"{BaseUrl}/tickets/{ticketId}/attachments";
-        
+
         using var content = new MultipartFormDataContent();
         var streamContent = new StreamContent(fileStream);
         if (!string.IsNullOrWhiteSpace(contentType))
@@ -581,18 +721,64 @@ public class TicketService : BaseService, ITicketService
             streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         }
         content.Add(streamContent, "uploadFiles", fileName);
-        
+
         var response = await HttpClient.PostAsync(url, content);
         var responseContent = await response.Content.ReadAsStringAsync();
-        
+
         if (!response.IsSuccessStatusCode)
         {
             throw new HttpRequestException($"API request failed: {response.StatusCode} - {responseContent}");
         }
-        
+
         ParseRateLimitHeaders(response.Headers);
-        return JsonSerializer.Deserialize<TicketAttachment>(responseContent, JsonOptions) 
+        return JsonSerializer.Deserialize<TicketAttachment>(responseContent, JsonOptions)
             ?? throw new InvalidOperationException("Failed to deserialize response");
+    }
+
+    /// <summary>
+    /// Uploads an attachment and returns a token that can be used when creating/replying to tickets
+    /// </summary>
+    public async Task<string> UploadAttachmentAsync(Stream fileStream, string fileName, string? contentType = null)
+    {
+        // Use the base URL but go up one level from /tickets to /attachments
+        var baseUri = new Uri(BaseUrl);
+        var url = $"{baseUri.Scheme}://{baseUri.Host}/api/v1/attachments";
+
+        using var content = new MultipartFormDataContent();
+        var streamContent = new StreamContent(fileStream);
+        if (!string.IsNullOrWhiteSpace(contentType))
+        {
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        }
+        content.Add(streamContent, "uploadFiles", fileName);
+
+        var response = await HttpClient.PostAsync(url, content);
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"API request failed: {response.StatusCode} - {responseContent}");
+        }
+
+        ParseRateLimitHeaders(response.Headers);
+
+        // Parse the response to extract the token
+        using var doc = JsonDocument.Parse(responseContent);
+        if (doc.RootElement.TryGetProperty("result", out var result) &&
+            result.ValueKind == JsonValueKind.Array &&
+            result.GetArrayLength() > 0 &&
+            result[0].TryGetProperty("token", out var token))
+        {
+            return token.GetString() ?? throw new InvalidOperationException("Token was null in response");
+        }
+
+        // Try alternative response formats
+        if (doc.RootElement.TryGetProperty("token", out var directToken))
+        {
+            return directToken.GetString() ?? throw new InvalidOperationException("Token was null in response");
+        }
+
+        throw new InvalidOperationException($"Could not extract attachment token from response: {responseContent}");
     }
 
     /// <summary>
@@ -1367,7 +1553,7 @@ public class TicketService : BaseService, ITicketService
     /// </summary>
     public async Task<PublicMessagesStats> GetPublicMessagesStatsAsync(int ticketId)
     {
-        var url = $"{BaseUrl}/tickets/{ticketId}/publicmessages/stats";
+        var url = $"{BaseUrl}/tickets/{ticketId}/public_messages/stats";
         return await ExecuteRequestAsync<PublicMessagesStats>(url);
     }
 
@@ -1443,7 +1629,8 @@ public class TicketService : BaseService, ITicketService
 
     private string BuildTicketMessagesUrl(int ticketId, TicketMessageQueryParameters parameters)
     {
-        var uriBuilder = new UriBuilder($"{BaseUrl}/tickets/{ticketId}/messages");
+        // BoldDesk API: /{ticketId}/messages - NO "tickets" in path!
+        var uriBuilder = new UriBuilder($"{BaseUrl}/{ticketId}/messages");
         var query = HttpUtility.ParseQueryString(string.Empty);
 
         query["page"] = parameters.Page.ToString();
@@ -1537,12 +1724,17 @@ public class TicketService : BaseService, ITicketService
 
     private string BuildPublicMessagesUrl(int ticketId, TicketMessageQueryParameters parameters)
     {
-        var uriBuilder = new UriBuilder($"{BaseUrl}/tickets/{ticketId}/publicmessages");
+        // BoldDesk API uses /tickets/public_messages with ticketId as query param, NOT /tickets/{id}/public_messages
+        var uriBuilder = new UriBuilder($"{BaseUrl}/tickets/public_messages");
         var query = HttpUtility.ParseQueryString(string.Empty);
 
+        query["ticketId"] = ticketId.ToString();
         query["page"] = parameters.Page.ToString();
         query["perPage"] = Math.Min(parameters.PerPage, 100).ToString();
-        query["requiresCounts"] = parameters.RequiresCounts.ToString().ToLower();
+        query["requiresCount"] = parameters.RequiresCounts.ToString().ToLower();
+        query["isFirstUpdateRequired"] = (parameters.IsFirstUpdateRequired ?? true).ToString().ToLower();
+        query["onlyCustomerUpdates"] = "false";
+        query["includeDeletedUpdates"] = "false";
 
         if (!string.IsNullOrWhiteSpace(parameters.OrderBy))
         {

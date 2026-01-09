@@ -7,13 +7,13 @@ namespace BoldDesk.Models;
 /// </summary>
 public class CreateTicketRequest
 {
-    [JsonPropertyName("title")]
+    [JsonPropertyName("subject")]
     public required string Title { get; set; }
 
     [JsonPropertyName("description")]
     public required string Description { get; set; }
 
-    [JsonPropertyName("requestedById")]
+    [JsonPropertyName("requesterId")]
     public int? RequestedById { get; set; }
 
     [JsonPropertyName("requestedForId")]
@@ -69,6 +69,9 @@ public class CreateTicketRequest
 
     [JsonPropertyName("externalReferenceId")]
     public string? ExternalReferenceId { get; set; }
+
+    [JsonPropertyName("ticketPortalValue")]
+    public string? TicketPortalValue { get; set; }
 }
 
 /// <summary>
@@ -133,7 +136,7 @@ public class ReplyTicketRequest
     [JsonPropertyName("toUserIds")]
     public List<int>? ToUserIds { get; set; }
 
-    [JsonPropertyName("ccUserIds")]
+    [JsonPropertyName("cc")]
     public List<int>? CcUserIds { get; set; }
 
     [JsonPropertyName("isPrivate")]
@@ -144,6 +147,18 @@ public class ReplyTicketRequest
 
     [JsonPropertyName("atMentionedUserIds")]
     public List<int>? AtMentionedUserIds { get; set; }
+
+    [JsonPropertyName("replyOnBehalfOfRequester")]
+    public bool? ReplyOnBehalfOfRequester { get; set; }
+
+    [JsonPropertyName("updatedByuserIdorEmailId")]
+    public string? UpdatedByUserIdOrEmailId { get; set; }
+
+    /// <summary>
+    /// Comma-separated attachment tokens obtained from the upload attachment API
+    /// </summary>
+    [JsonPropertyName("attachments")]
+    public string? Attachments { get; set; }
 }
 
 /// <summary>

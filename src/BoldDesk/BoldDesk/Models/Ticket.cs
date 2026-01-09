@@ -5,29 +5,39 @@ namespace BoldDesk.Models;
 public class Ticket
 {
     private int _ticketId;
+    private bool _ticketIdExplicitlySet;
 
-    // Primary mapping used by list APIs
+    // Primary mapping used by list APIs - this is the public-facing ticket ID
     [JsonPropertyName("ticketId")]
     public int TicketId
     {
         get => _ticketId;
-        set => _ticketId = value;
+        set
+        {
+            _ticketId = value;
+            _ticketIdExplicitlySet = true;
+        }
     }
 
-    // Some endpoints may return "id" instead of "ticketId" for single ticket
+    // Some endpoints may return "id" instead of "ticketId" for single ticket.
+    // Only use this as a fallback if ticketId wasn't explicitly set.
     [JsonPropertyName("id")]
     public int? Id
     {
         get => _ticketId;
         set
         {
-            if (value.HasValue)
+            // Only set if ticketId wasn't already provided - ticketId takes precedence
+            if (value.HasValue && !_ticketIdExplicitlySet)
                 _ticketId = value.Value;
         }
     }
 
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
 
     [JsonPropertyName("ticketStatusCategoryId")]
     public int TicketStatusCategoryId { get; set; }
@@ -57,13 +67,13 @@ public class Ticket
     public DateTime? LastUpdatedOn { get; set; }
 
     [JsonPropertyName("brand")]
-    public string? Brand { get; set; }
+    public object? Brand { get; set; }
 
     [JsonPropertyName("brandId")]
     public int? BrandId { get; set; }
 
     [JsonPropertyName("mode")]
-    public string? Mode { get; set; }
+    public object? Mode { get; set; }
 
     // Map type.name to Mode if provided (some APIs use "type")
     [JsonPropertyName("type")]
@@ -83,7 +93,7 @@ public class Ticket
     public int? SourceId { get; set; }
 
     [JsonPropertyName("source")]
-    public string? Source { get; set; }
+    public object? Source { get; set; }
 
     [JsonPropertyName("lastRepliedOn")]
     public DateTime? LastRepliedOn { get; set; }

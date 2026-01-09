@@ -1,7 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BoldDesk.Models;
 using BoldDesk.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BoldDesk;
 
@@ -14,7 +17,8 @@ public class BoldDeskClient : IBoldDeskClient
     private readonly bool _ownsHttpClient;
     private readonly string _baseUrl;
     private readonly JsonSerializerOptions _jsonOptions;
-    
+    private readonly ILogger _logger;
+
     // Sub-services
     private readonly TicketService _ticketService;
     private readonly WorklogService _worklogService;
@@ -29,29 +33,53 @@ public class BoldDeskClient : IBoldDeskClient
     /// </summary>
     /// <param name="domain">Your BoldDesk domain (e.g., yourdomain.bolddesk.com)</param>
     /// <param name="apiKey">Your BoldDesk API key</param>
-    public BoldDeskClient(string domain, string apiKey) : this(new HttpClient(), domain, apiKey, true)
+    public BoldDeskClient(string domain, string apiKey) : this(new HttpClient(), domain, apiKey, true, null)
     {
     }
-    
+
     /// <summary>
     /// Initializes a new instance of the BoldDesk client with a provided HttpClient (recommended for production)
     /// </summary>
     /// <param name="httpClient">HttpClient instance (should be managed by DI container or HttpClientFactory)</param>
     /// <param name="domain">Your BoldDesk domain (e.g., yourdomain.bolddesk.com)</param>
     /// <param name="apiKey">Your BoldDesk API key</param>
-    public BoldDeskClient(HttpClient httpClient, string domain, string apiKey) : this(httpClient, domain, apiKey, false)
+    public BoldDeskClient(HttpClient httpClient, string domain, string apiKey) : this(httpClient, domain, apiKey, false, null)
     {
     }
-    
+
+    /// <summary>
+    /// Initializes a new instance of the BoldDesk client with logging support
+    /// </summary>
+    /// <param name="domain">Your BoldDesk domain (e.g., yourdomain.bolddesk.com)</param>
+    /// <param name="apiKey">Your BoldDesk API key</param>
+    /// <param name="logger">Logger instance for debugging</param>
+    public BoldDeskClient(string domain, string apiKey, ILogger logger) : this(new HttpClient(), domain, apiKey, true, logger)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the BoldDesk client with a provided HttpClient and logging support
+    /// </summary>
+    /// <param name="httpClient">HttpClient instance (should be managed by DI container or HttpClientFactory)</param>
+    /// <param name="domain">Your BoldDesk domain (e.g., yourdomain.bolddesk.com)</param>
+    /// <param name="apiKey">Your BoldDesk API key</param>
+    /// <param name="logger">Logger instance for debugging</param>
+    public BoldDeskClient(HttpClient httpClient, string domain, string apiKey, ILogger logger) : this(httpClient, domain, apiKey, false, logger)
+    {
+    }
+
     /// <summary>
     /// Private constructor for internal initialization
     /// </summary>
-    private BoldDeskClient(HttpClient httpClient, string domain, string apiKey, bool ownsHttpClient)
+    private BoldDeskClient(HttpClient httpClient, string domain, string apiKey, bool ownsHttpClient, ILogger? logger)
     {
         _httpClient = httpClient;
         _ownsHttpClient = ownsHttpClient;
-        _baseUrl = $"https://{domain}/api/v1.0";
-        
+        _baseUrl = $"https://{domain}/api/v1";
+        _logger = logger ?? NullLogger.Instance;
+
+        _logger.LogInformation("Initializing BoldDesk client for domain: {Domain}, BaseUrl: {BaseUrl}", domain, _baseUrl);
+
         // Configure HTTP timeout (allow override via env var)
         try
         {
@@ -73,25 +101,26 @@ public class BoldDeskClient : IBoldDeskClient
         {
             // Ignore timeout configuration errors
         }
-        
+
         if (!_httpClient.DefaultRequestHeaders.Contains("x-api-key"))
         {
             _httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
         }
-        
+
         if (!_httpClient.DefaultRequestHeaders.Accept.Any(h => h.MediaType == "application/json"))
         {
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
-        
+
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
-        
-        // Initialize sub-services
-        _ticketService = new TicketService(_httpClient, _baseUrl, _jsonOptions);
+
+        // Initialize sub-services with logger
+        _ticketService = new TicketService(_httpClient, _baseUrl, _jsonOptions, _logger);
         _worklogService = new WorklogService(_httpClient, _baseUrl, _jsonOptions);
         _brandService = new BrandService(_httpClient, _baseUrl, _jsonOptions);
         _agentService = new AgentService(_httpClient, _baseUrl, _jsonOptions);
