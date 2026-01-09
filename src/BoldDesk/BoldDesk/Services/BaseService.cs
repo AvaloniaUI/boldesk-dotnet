@@ -327,7 +327,11 @@ public abstract class BaseService
             stopwatch.Stop();
             Logger.LogError(ex, "[BoldDesk GET] Request timeout after {ElapsedMs}ms for {Url}: {Message}",
                 stopwatch.ElapsedMilliseconds, url, ex.Message);
-            throw new BoldDeskApiException($"API request timed out: {ex.Message}", ex);
+            throw new BoldDeskTimeoutException(
+                "A timeout occurred while communicating with our support system. Please try again later.",
+                url,
+                stopwatch.ElapsedMilliseconds,
+                ex);
         }
     }
 
@@ -389,7 +393,11 @@ public abstract class BaseService
         {
             stopwatch.Stop();
             Logger.LogError(ex, "[BoldDesk POST] Timeout after {ElapsedMs}ms for {Url}", stopwatch.ElapsedMilliseconds, url);
-            throw new BoldDeskApiException($"API request timed out: {ex.Message}", ex);
+            throw new BoldDeskTimeoutException(
+                "A timeout occurred while communicating with our support system. Please try again later.",
+                url,
+                stopwatch.ElapsedMilliseconds,
+                ex);
         }
     }
 }
