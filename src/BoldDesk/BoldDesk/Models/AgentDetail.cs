@@ -107,7 +107,7 @@ public class AgentDetail
     public string? ExternalReferenceId { get; set; }
 
     [JsonPropertyName("agentTag")]
-    public string? AgentTag { get; set; }
+    public List<IdNamePair>? AgentTag { get; set; }
 
     [JsonPropertyName("userCountryId")]
     [JsonConverter(typeof(NullableIntConverter))]
@@ -142,7 +142,7 @@ public class AgentDetail
     public string? ContactNotes { get; set; }
 
     [JsonPropertyName("contactTag")]
-    public string? ContactTag { get; set; }
+    public List<IdNamePair>? ContactTag { get; set; }
 }
 
 public class AgentRole

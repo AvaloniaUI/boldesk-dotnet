@@ -231,27 +231,78 @@ public class TicketService : BaseService, ITicketService
     }
 
     /// <summary>
-    /// Updates an existing ticket
+    /// Updates an existing ticket using the /update_fields endpoint.
+    /// Returns the updated ticket by fetching it after the update.
     /// </summary>
     public async Task<Ticket> UpdateTicketAsync(int ticketId, UpdateTicketRequest request)
     {
-        var url = $"{BaseUrl}/tickets/{ticketId}";
+        // Convert UpdateTicketRequest to EditTicketFieldsRequest format
+        var fieldsRequest = new EditTicketFieldsRequest();
+
+        if (request.Title != null) fieldsRequest.Fields["subject"] = request.Title;
+        if (request.CategoryId.HasValue) fieldsRequest.Fields["categoryId"] = request.CategoryId.Value;
+        if (request.SubCategoryId.HasValue) fieldsRequest.Fields["subCategoryId"] = request.SubCategoryId.Value;
+        if (request.PriorityId.HasValue) fieldsRequest.Fields["priorityId"] = request.PriorityId.Value;
+        if (request.StatusId.HasValue) fieldsRequest.Fields["statusId"] = request.StatusId.Value;
+        if (request.AgentId.HasValue) fieldsRequest.Fields["agentId"] = request.AgentId.Value;
+        if (request.GroupId.HasValue) fieldsRequest.Fields["groupId"] = request.GroupId.Value;
+        if (request.TypeId.HasValue) fieldsRequest.Fields["typeId"] = request.TypeId.Value;
+        if (request.ProductId.HasValue) fieldsRequest.Fields["productId"] = request.ProductId.Value;
+        if (request.DueDate.HasValue) fieldsRequest.Fields["dueDate"] = request.DueDate.Value.ToString("O");
+        if (request.ExternalReferenceId != null) fieldsRequest.Fields["externalReferenceId"] = request.ExternalReferenceId;
+
+        // Add custom fields directly to the fields dictionary
+        if (request.CustomFields != null)
+        {
+            foreach (var cf in request.CustomFields)
+            {
+                fieldsRequest.Fields[cf.Key] = cf.Value;
+            }
+        }
+
+        // Use skipDependencyValidation=true to allow partial updates without requiring all dependent fields
+        var result = await UpdateTicketFieldsAsync(ticketId, fieldsRequest, skipDependencyValidation: true);
+
+        if (!result.IsSuccess)
+        {
+            throw new HttpRequestException($"Failed to update ticket: {result.Message}");
+        }
+
+        // Fetch and return the updated ticket
+        return await GetTicketAsync(ticketId);
+    }
+
+    /// <summary>
+    /// Updates ticket fields using the /update_fields endpoint directly.
+    /// </summary>
+    public async Task<FieldUpdateResult> UpdateTicketFieldsAsync(int ticketId, EditTicketFieldsRequest request, bool skipDependencyValidation = false)
+    {
+        var url = $"{BaseUrl}/tickets/{ticketId}/update_fields?skipDependencyValidation={skipDependencyValidation.ToString().ToLower()}";
         var content = new StringContent(
             JsonSerializer.Serialize(request, JsonOptions),
             Encoding.UTF8,
             "application/json");
-        
+
         var response = await HttpClient.PutAsync(url, content);
         var responseContent = await response.Content.ReadAsStringAsync();
-        
+
         if (!response.IsSuccessStatusCode)
         {
+            // Check if the error is just "No changes found" - treat this as success
+            // since it means the field already has the desired value
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest &&
+                responseContent.Contains("No changes found"))
+            {
+                ParseRateLimitHeaders(response.Headers);
+                return new FieldUpdateResult { IsSuccess = true, Message = "No changes needed" };
+            }
+
             throw new HttpRequestException($"API request failed: {response.StatusCode} - {responseContent}");
         }
-        
+
         ParseRateLimitHeaders(response.Headers);
-        return JsonSerializer.Deserialize<Ticket>(responseContent, JsonOptions) 
-            ?? throw new InvalidOperationException("Failed to deserialize response");
+        return JsonSerializer.Deserialize<FieldUpdateResult>(responseContent, JsonOptions)
+            ?? new FieldUpdateResult { IsSuccess = true, Message = "Update completed" };
     }
 
     /// <summary>

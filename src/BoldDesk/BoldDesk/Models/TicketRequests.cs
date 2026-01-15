@@ -123,6 +123,38 @@ public class UpdateTicketRequest
 }
 
 /// <summary>
+/// Request model for editing ticket fields via the /update_fields endpoint.
+/// All fields to update must be passed in the Fields dictionary.
+/// </summary>
+public class EditTicketFieldsRequest
+{
+    /// <summary>
+    /// Dictionary of field names to values. For standard fields use: statusId, priorityId, categoryId, etc.
+    /// For custom fields use the cf_ prefix: cf_field_name.
+    /// </summary>
+    [JsonPropertyName("fields")]
+    public Dictionary<string, object> Fields { get; set; } = new();
+
+    /// <summary>
+    /// Optional notes to add when updating the ticket.
+    /// </summary>
+    [JsonPropertyName("notes")]
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from the /update_fields endpoint.
+/// </summary>
+public class FieldUpdateResult
+{
+    [JsonPropertyName("isSuccess")]
+    public bool IsSuccess { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+}
+
+/// <summary>
 /// Request model for replying to a ticket
 /// </summary>
 public class ReplyTicketRequest

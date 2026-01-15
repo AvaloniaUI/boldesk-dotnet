@@ -102,14 +102,55 @@ public class TicketNote
 /// </summary>
 public class TicketAttachment
 {
+    private int _attachmentId;
+    private string _fileName = string.Empty;
+    private long _fileSize;
+    private string? _url;
+
     [JsonPropertyName("attachmentId")]
-    public int AttachmentId { get; set; }
+    public int AttachmentId
+    {
+        get => _attachmentId;
+        set => _attachmentId = value;
+    }
+
+    // BoldDesk returns "id" in ticket message attachments
+    [JsonPropertyName("id")]
+    public int Id
+    {
+        get => _attachmentId;
+        set { if (value != 0) _attachmentId = value; }
+    }
 
     [JsonPropertyName("fileName")]
-    public string FileName { get; set; } = string.Empty;
+    public string FileName
+    {
+        get => _fileName;
+        set => _fileName = value;
+    }
+
+    // BoldDesk returns "name" in ticket message attachments
+    [JsonPropertyName("name")]
+    public string? Name
+    {
+        get => _fileName;
+        set { if (!string.IsNullOrEmpty(value)) _fileName = value; }
+    }
 
     [JsonPropertyName("fileSize")]
-    public long FileSize { get; set; }
+    public long FileSize
+    {
+        get => _fileSize;
+        set => _fileSize = value;
+    }
+
+    // BoldDesk returns "size" in ticket message attachments
+    [JsonPropertyName("size")]
+    public long Size
+    {
+        get => _fileSize;
+        set { if (value != 0) _fileSize = value; }
+    }
 
     [JsonPropertyName("contentType")]
     public string? ContentType { get; set; }
@@ -121,7 +162,28 @@ public class TicketAttachment
     public int CreatedBy { get; set; }
 
     [JsonPropertyName("url")]
-    public string? Url { get; set; }
+    public string? Url
+    {
+        get => _url;
+        set => _url = value;
+    }
+
+    // BoldDesk returns "fileUrl" in ticket message attachments
+    [JsonPropertyName("fileUrl")]
+    public string? FileUrl
+    {
+        get => _url;
+        set { if (!string.IsNullOrEmpty(value)) _url = value; }
+    }
+
+    [JsonPropertyName("extension")]
+    public string? Extension { get; set; }
+
+    [JsonPropertyName("cloudStorageType")]
+    public string? CloudStorageType { get; set; }
+
+    [JsonPropertyName("isExternalFile")]
+    public bool IsExternalFile { get; set; }
 }
 
 /// <summary>
