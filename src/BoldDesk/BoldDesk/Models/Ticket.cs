@@ -34,6 +34,9 @@ public class Ticket
 
     [JsonPropertyName("agent")]
     public Agent? Agent { get; set; }
+    
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
 
     [JsonPropertyName("group")]
     public Group? Group { get; set; }

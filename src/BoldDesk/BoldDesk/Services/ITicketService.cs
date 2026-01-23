@@ -30,7 +30,7 @@ public interface ITicketService
     /// <summary>
     /// Gets a specific ticket by ID
     /// </summary>
-    Task<Ticket> GetTicketAsync(int ticketId);
+    Task<FullTicket> GetTicketAsync(int ticketId);
     
     /// <summary>
     /// Creates a new ticket
@@ -380,7 +380,7 @@ public interface ITicketService
     /// <summary>
     /// Gets ticket updates list
     /// </summary>
-    Task<BoldDeskResponse<TicketUpdate>> GetTicketUpdatesAsync(int ticketId, TicketUpdatesQueryParameters? parameters = null);
+    Task<BoldDeskResponse<TicketActivity>> GetTicketUpdatesAsync(int ticketId, TicketUpdatesQueryParameters? parameters = null);
     
     /// <summary>
     /// Gets all ticket updates across tickets

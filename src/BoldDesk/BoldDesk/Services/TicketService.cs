@@ -108,10 +108,10 @@ public class TicketService : BaseService, ITicketService
     /// <summary>
     /// Retrieves a single ticket by its ID
     /// </summary>
-    public async Task<Ticket> GetTicketAsync(int ticketId)
+    public async Task<FullTicket> GetTicketAsync(int ticketId)
     {
         var url = $"{BaseUrl}/tickets/{ticketId}";
-        return await ExecuteRequestAsync<Ticket>(url);
+        return await ExecuteRequestAsync<FullTicket>(url);
     }
 
     /// <summary>
@@ -1262,11 +1262,11 @@ public class TicketService : BaseService, ITicketService
     /// <summary>
     /// Gets ticket updates list
     /// </summary>
-    public async Task<BoldDeskResponse<TicketUpdate>> GetTicketUpdatesAsync(int ticketId, TicketUpdatesQueryParameters? parameters = null)
+    public async Task<BoldDeskResponse<TicketActivity>> GetTicketUpdatesAsync(int ticketId, TicketUpdatesQueryParameters? parameters = null)
     {
         parameters ??= new TicketUpdatesQueryParameters();
         var url = BuildTicketUpdatesUrl(ticketId, parameters);
-        return await ExecuteRequestAsync<BoldDeskResponse<TicketUpdate>>(url);
+        return await ExecuteRequestAsync<BoldDeskResponse<TicketActivity>>(url);
     }
 
     /// <summary>
