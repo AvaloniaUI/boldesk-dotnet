@@ -173,7 +173,9 @@ public class TicketService : BaseService, ITicketService
             request.Title, request.RequestedById, request.BrandId);
 
         var url = $"{BaseUrl}/tickets";
-        var requestJson = JsonSerializer.Serialize(request, JsonOptions);
+
+        // Serialize with custom fields flattened at root level
+        var requestJson = SerializeCreateTicketRequest(request);
 
         Logger.LogDebug("[BoldDesk] CreateTicket request body: {RequestBody}", requestJson);
 
@@ -1955,5 +1957,116 @@ public class TicketService : BaseService, ITicketService
 
         uriBuilder.Query = query.ToString();
         return uriBuilder.ToString();
+    }
+
+    /// <summary>
+    /// Serializes a CreateTicketRequest with custom fields flattened at the root level.
+    /// BoldDesk expects custom fields (like cf_accelerate_product) at the root, not nested under "customFields".
+    /// </summary>
+    private string SerializeCreateTicketRequest(CreateTicketRequest request)
+    {
+        // First serialize without custom fields to get the base JSON
+        var customFields = request.CustomFields;
+        request.CustomFields = null;
+
+        using var stream = new MemoryStream();
+        using var writer = new Utf8JsonWriter(stream);
+
+        writer.WriteStartObject();
+
+        // Manually write each property
+        writer.WriteString("subject", request.Title);
+        writer.WriteString("description", request.Description);
+
+        if (request.RequestedById.HasValue)
+            writer.WriteNumber("requesterId", request.RequestedById.Value);
+
+        if (request.RequestedForId.HasValue)
+            writer.WriteNumber("requestedForId", request.RequestedForId.Value);
+
+        if (request.CcUserIds != null && request.CcUserIds.Count > 0)
+        {
+            writer.WriteStartArray("ccUserIds");
+            foreach (var id in request.CcUserIds)
+                writer.WriteNumberValue(id);
+            writer.WriteEndArray();
+        }
+
+        if (request.CategoryId.HasValue)
+            writer.WriteNumber("categoryId", request.CategoryId.Value);
+
+        if (request.SubCategoryId.HasValue)
+            writer.WriteNumber("subCategoryId", request.SubCategoryId.Value);
+
+        if (request.PriorityId.HasValue)
+            writer.WriteNumber("priorityId", request.PriorityId.Value);
+
+        if (request.StatusId.HasValue)
+            writer.WriteNumber("statusId", request.StatusId.Value);
+
+        if (request.AgentId.HasValue)
+            writer.WriteNumber("agentId", request.AgentId.Value);
+
+        if (request.GroupId.HasValue)
+            writer.WriteNumber("groupId", request.GroupId.Value);
+
+        if (request.SourceId.HasValue)
+            writer.WriteNumber("sourceId", request.SourceId.Value);
+
+        if (request.Tags != null && request.Tags.Count > 0)
+        {
+            writer.WriteStartArray("tags");
+            foreach (var tag in request.Tags)
+                writer.WriteStringValue(tag);
+            writer.WriteEndArray();
+        }
+
+        if (request.BrandId.HasValue)
+            writer.WriteNumber("brandId", request.BrandId.Value);
+
+        if (request.TypeId.HasValue)
+            writer.WriteNumber("typeId", request.TypeId.Value);
+
+        if (request.IsSpam.HasValue)
+            writer.WriteBoolean("isSpam", request.IsSpam.Value);
+
+        if (request.ProductId.HasValue)
+            writer.WriteNumber("productId", request.ProductId.Value);
+
+        if (request.SkipEmailNotification.HasValue)
+            writer.WriteBoolean("skipEmailNotification", request.SkipEmailNotification.Value);
+
+        if (request.DueDate.HasValue)
+            writer.WriteString("dueDate", request.DueDate.Value.ToString("O"));
+
+        if (!string.IsNullOrEmpty(request.ExternalReferenceId))
+            writer.WriteString("externalReferenceId", request.ExternalReferenceId);
+
+        if (!string.IsNullOrEmpty(request.TicketPortalValue))
+            writer.WriteString("ticketPortalValue", request.TicketPortalValue);
+
+        if (!string.IsNullOrEmpty(request.Attachments))
+            writer.WriteString("attachments", request.Attachments);
+
+        // Write custom fields under "customFields" wrapper
+        if (customFields != null && customFields.Count > 0)
+        {
+            writer.WritePropertyName("customFields");
+            writer.WriteStartObject();
+            foreach (var kvp in customFields)
+            {
+                writer.WritePropertyName(kvp.Key);
+                JsonSerializer.Serialize(writer, kvp.Value, JsonOptions);
+            }
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndObject();
+        writer.Flush();
+
+        // Restore custom fields
+        request.CustomFields = customFields;
+
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 }

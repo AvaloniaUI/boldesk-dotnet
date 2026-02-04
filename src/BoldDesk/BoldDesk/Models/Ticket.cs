@@ -237,6 +237,9 @@ public class Ticket
     [JsonPropertyName("cf_accelerate_support_tier")]
     public string? AccelerateSupportTier { get; set; }
 
+    [JsonPropertyName("cf_accelerate_product")]
+    public object? AccelerateProduct { get; set; }
+
     [JsonPropertyName("customFields")]
     public object? CustomFields { get; set; }
 

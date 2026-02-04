@@ -46,7 +46,10 @@ public class CreateTicketRequest
     [JsonPropertyName("tags")]
     public List<string>? Tags { get; set; }
 
-    [JsonPropertyName("customFields")]
+    /// <summary>
+    /// Custom fields to include in the ticket. These are serialized at the root level
+    /// of the JSON request (not nested under "customFields") by the TicketService.
+    /// </summary>
     public Dictionary<string, object>? CustomFields { get; set; }
 
     [JsonPropertyName("brandId")]
@@ -72,6 +75,12 @@ public class CreateTicketRequest
 
     [JsonPropertyName("ticketPortalValue")]
     public string? TicketPortalValue { get; set; }
+
+    /// <summary>
+    /// Comma-separated attachment tokens obtained from the upload attachment API
+    /// </summary>
+    [JsonPropertyName("attachments")]
+    public string? Attachments { get; set; }
 }
 
 /// <summary>
